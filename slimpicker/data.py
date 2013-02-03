@@ -1,6 +1,19 @@
 from configparser import ConfigParser
 from slimpicker.providers import ShowInfoProvider
 
+class Show:
+    id = None
+    last = None
+    latest = None
+    name = None
+    use_date = False
+
+class Episode:
+    pass
+
+class Resource:
+    pass
+
 class Subscriptions:
     subscriptions = {}
     config = ConfigParser()
@@ -9,16 +22,12 @@ class Subscriptions:
     def __init__(self, show_info_provider):
         self.show_info_provider = show_info_provider
 
-    def update_show(self, show):
-        if show in self.subscriptions:
-            sid = self.subscriptions[show]['id']
-        else:
-            sid = self.show_info_provider.get_show_id(show)
-            self.subscriptions[show]['id'] = sid
-        latest_episode = self.show_info_provider.get_latest_episode(sid)
-        self.subscriptions[show]['name'] = latest_episode['show_name']
-        self.subscriptions[show]['latest'] =\
-            self.episode_format.format(latest_episode['season'], latest_episode['episode'])
+    def update_show(self, show_name):
+        show = self.get_or_create_subscribed_show(show_name)
+        latest_episode = self.show_info_provider.get_latest_episode(show.id)
+        show.name = latest_episode['show_name']
+        show.latest = self.episode_format.format(latest_episode['season'], latest_episode['episode'])
+        self.subscriptions[show_name] = show
 
     def load_subscriptions(self, filename):
         try:
@@ -26,53 +35,48 @@ class Subscriptions:
         except IOError as e:
             raise IOError(e)
         self.subscriptions = {} # reset field
-        for show in self.config.sections():
-            subscription = {}
-            for field in ['id', 'name', 'last', 'latest']:
-                if self.config.has_option(show, field):
-                    subscription[field] = self.config.get(show, field)
-            self.subscriptions[show] = subscription
+        for section in self.config.sections():
+            show = Show()
+            for key in self.config[section]:
+                show.__setattr__(key, self.config[section][key])
+            self.subscriptions[section] = show
 
     def save_subscriptions(self, filename):
-        for show, subscription in self.subscriptions.items():
-            for section, value in sorted(subscription.items()):
-                self.config.set(show, section, value)
+        for show_name, show in self.subscriptions.items():
+            for attribute, value in sorted(show.__dict__.items()):
+                self.config.set(show_name, attribute, value)
         self.config.write(open(filename, mode='w'), True)
 
     def get_subscriptions(self):
         return self.subscriptions
 
-    def get_subscription(self, show):
+    def get_or_create_subscribed_show(self, show_name):
         subscriptions = self.get_subscriptions()
-        if show in subscriptions:
-            subscription = { show : subscriptions[show] }
-        else:
-            subscription = None
-        return subscription
+        if not show_name in subscriptions:
+            show = Show()
+            show.id = self.show_info_provider.get_show_id(show_name)
+            self.subscriptions[show_name] = show
+        return subscriptions[show_name]
 
     def get_delta_for_show(self, show_name):
-        if self.subscriptions[show_name]['last'].split('x') == self.subscriptions[show_name]['latest'].split('x'):
+        show = self.subscriptions[show_name]
+        if not (hasattr(show, 'last') and hasattr(show, 'latest') and hasattr(show, 'id')):
+            raise ValueError('Show \'{0}\' instance is missing attribute(s).'.format(show_name))
+        if show.last.split('x') == show.latest.split('x'):
             delta = []
         else:
-            episode_list = self.show_info_provider.get_episode_list(self.subscriptions[show_name]['id'])
-            last = episode_list.index(self.subscriptions[show_name]['last']) + 1
-            latest = episode_list.index(self.subscriptions[show_name]['latest']) + 1
+            episode_list = self.show_info_provider.get_episode_list(show.id)
+            last = episode_list.index(show.last) + 1
+            latest = episode_list.index(show.latest) + 1
             delta = episode_list[last:latest]
         return delta
 
     def update_subscriptions(self):
-        for show in self.get_subscriptions().keys():
-            self.update_show(show)
+        for show_name in self.get_subscriptions().keys():
+            self.update_show(show_name)
 
     def get_wanted_episodes(self):
         wanted_episodes = {}
-        for show in self.get_subscriptions().keys():
-            wanted_episodes[show] = (self.get_delta_for_show(show))
+        for show_name in self.get_subscriptions().keys():
+            wanted_episodes[show_name] = self.get_delta_for_show(show_name)
         return wanted_episodes
-
-if __name__ == '__main__':
-    sip = ShowInfoProvider()
-    s = Subscriptions(sip)
-    s.load_subscriptions()
-    s.update_subscriptions()
-    print(s.get_subscriptions())
