@@ -1,0 +1,6 @@
+.idea/
+*.pyc
+*.ini
+*.dl
+*/__pycache__/
+*~
