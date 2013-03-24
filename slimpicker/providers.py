@@ -1,5 +1,4 @@
 import requests
-from xml.etree import ElementTree
 from bs4 import BeautifulSoup
 from datetime import date
 import re
@@ -12,7 +11,6 @@ class SubscriptionProvider:
         self._options = options
 
     def get_subscribed_shows(self):
-        subscribed_shows = []
         s = requests.session()
         payload = {'username' : self._options.showrss['username'],
                    'password' : self._options.showrss['password']}
@@ -20,9 +18,19 @@ class SubscriptionProvider:
         r = s.get(self._options.showrss['shows_url'])
         soup = BeautifulSoup(r.text)
         shows = soup.find_all(href=re.compile('cs=browse&show='))
+        show_ids = []
         for show in shows:
-            subscribed_shows.append(show.get_text())
-        return subscribed_shows
+            show_id = (re.findall('cs=browse&show=([0-9]+)', show['href']))
+            show_ids.append(show_id[0])
+
+        r = s.get(self._options.showrss['selection_url'])
+        soup = BeautifulSoup(r.text)
+        show_option = {}
+        for option in soup.find_all('option'):
+            show_option[option['value']] = option.text
+        subscribed_shows = {show_id: show_option[show_id] for show_id in show_ids}
+
+        return sorted(subscribed_shows.values(), key=str.lower)
 
 
 class ShowInfoProvider:
@@ -165,6 +173,17 @@ class LinkProvider():
 
         return download_links
 
+    def get_hoster_id(self, hoster_name):
+        r = requests.get('http://www.filestube.com/query.html?q=test&sah=1')
+        soup = BeautifulSoup(r.text)
+        hoster = soup.find_all('a',
+                               {'class': 'hosting_all'},
+                               text=re.compile(hoster_name, re.IGNORECASE))
+        hoster = hoster[0]
+        hoster_id = re.findall('hosting=[0-9]+', hoster['href'])
+        hoster_id = hoster_id[0].split('=')
+        return hoster_id[1]
+
+
 if __name__ == '__main__':
     sp = SubscriptionProvider()
-    print(sp.get_subscribed_shows())
