@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name='slimpicker',
@@ -13,13 +13,15 @@ setup(
     install_requires=[
         'beautifulsoup4 >= 4.1.3',
         'distribute',
-        'requests >= 1.1'
+        'requests >= 1.1',
+        'lxml >= 3.1.0',
+        'chardet >= 2.0.0'
     ],
-    packages=find_packages(),
+    packages=['slimpicker'],
     zip_safe=False,
     entry_points={
         'console_scripts' : [
-            'slimpicker = slimpicker.ui.main_func'
+            'slimpicker = slimpicker.ui:main_func'
         ]
     }
 )

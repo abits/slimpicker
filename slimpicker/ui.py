@@ -5,6 +5,7 @@ from datetime import datetime
 from argparse import ArgumentParser
 from configparser import ConfigParser
 
+
 class Options:
     parser = ArgumentParser()
     options = ConfigParser()
@@ -56,23 +57,24 @@ class Console:
     subscriptions = Subscriptions(show_info_provider)
     query_string_format = '{:s} S{:s}E{:s}'
 
-    def __init__(self):
-        self.subscriptions.load_subscriptions(self.options.subscriptions_file)
-
-    def get_query_strings(self, params = None):
+    def get_query_strings(self, **kwargs):
         query_strings_by_show = {}
         self.subscriptions.update_subscriptions()
         for show_name, episodes in self.subscriptions.get_wanted_episodes().items():
             query_strings = []
+            show = self.subscriptions.subscriptions[show_name]
             for episode in episodes:
-                season_number, episode_number = episode.split('x')
-                query_string = self.query_string_format.format(show_name, season_number, episode_number)
-                if params:
-                    query_string += ' ' + params
+                if show.use_date is True:
+                    query_string = show.name + ' '
+                    query_string += show.latest_date.strftime('%Y %m %d')
+                else:
+                    season_number, episode_number = episode.split('x')
+                    query_string = self.query_string_format.format(show.name, season_number, episode_number)
+                if 'params' in kwargs:
+                    query_string += ' ' + kwargs['params']
                 query_strings.append(query_string)
             query_strings_by_show[show_name] = query_strings
         return query_strings_by_show
-
 
     def get_download_links(self, query_strings):
         download_links_by_show = {}
@@ -131,12 +133,19 @@ class Console:
             self.write_subscription_template()
         elif self.options.args.update:
             self.subscriptions.load_subscriptions(self.options.subscriptions_file)
+            self.subscriptions.update_subscriptions()
             self.subscriptions.save_subscriptions(self.options.subscriptions_file)
         elif self.options.args.download:
+            self.subscriptions.load_subscriptions(self.options.subscriptions_file)
             dl = self.get_download_links(self.get_query_strings())
             self.write_plow_file(dl, self.options.slimlinks_file)
 
-if __name__ == '__main__':
+
+def main_func():
     c = Console()
     c.main()
+
+
+if __name__ == '__main__':
+    main_func()
     exit(0)

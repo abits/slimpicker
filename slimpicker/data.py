@@ -1,18 +1,23 @@
 from configparser import ConfigParser
 from slimpicker.providers import ShowInfoProvider
 
+
 class Show:
     id = None
     last = None
     latest = None
     name = None
     use_date = False
+    latest_date = None
+
 
 class Episode:
     pass
 
+
 class Resource:
     pass
+
 
 class Subscriptions:
     subscriptions = {}
@@ -25,8 +30,11 @@ class Subscriptions:
     def update_show(self, show_name):
         show = self.get_or_create_subscribed_show(show_name)
         latest_episode = self.show_info_provider.get_latest_episode(show.id)
-        show.name = latest_episode['show_name']
-        show.latest = self.episode_format.format(latest_episode['season'], latest_episode['episode'])
+        if latest_episode:
+            show.latest = self.episode_format.format(latest_episode['season'], latest_episode['episode'])
+            show.latest_date = latest_episode['airdate']
+            if not show.last:
+                show.last = show.latest
         self.subscriptions[show_name] = show
 
     def load_subscriptions(self, filename):
@@ -38,13 +46,18 @@ class Subscriptions:
         for section in self.config.sections():
             show = Show()
             for key in self.config[section]:
-                show.__setattr__(key, self.config[section][key])
+                ini_value = self.config[section][key]
+                if ini_value in ['yes', 'no', '1', '0', 'on', 'off', 'True', 'true', 'False', 'false']:
+                    value = self.config.getboolean(section, key)
+                else:
+                    value = ini_value
+                show.__setattr__(key, value)
             self.subscriptions[section] = show
 
     def save_subscriptions(self, filename):
         for show_name, show in self.subscriptions.items():
             for attribute, value in sorted(show.__dict__.items()):
-                self.config.set(show_name, attribute, value)
+                self.config.set(show_name, attribute, str(value))
         self.config.write(open(filename, mode='w'), True)
 
     def get_subscriptions(self):
@@ -52,9 +65,15 @@ class Subscriptions:
 
     def get_or_create_subscribed_show(self, show_name):
         subscriptions = self.get_subscriptions()
-        if not show_name in subscriptions:
+        if not show_name in subscriptions \
+                or not subscriptions[show_name].id:
             show = Show()
             show.id = self.show_info_provider.get_show_id(show_name)
+            latest_episode = self.show_info_provider.get_latest_episode(show.id)
+            if latest_episode:
+                show.name = latest_episode['show_name']
+            else:
+                show.name = show_name
             self.subscriptions[show_name] = show
         return subscriptions[show_name]
 
